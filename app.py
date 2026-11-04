@@ -1,155 +1,58 @@
-
-import streamlit as st
+import streamlit as tf
 from ultralytics import YOLO
 from PIL import Image
-import tempfile
-import os
+import numpy as np
+import cv2
 
-st.set_page_config(
-    page_title="Helmet Detection AI",
-    page_icon="⛑️",
-    layout="wide"
-)
+# Page Configuration
+st.set_page_config(page_title="Helmet Detector", page_icon="🪖", layout="centered")
 
-st.title("⛑️ Helmet Detection AI")
-st.write("AI-powered Motorcycle Helmet Detection System")
+st.title("🪖 Helmet Detection App")
+st.write("Apni photo upload karein taake model check kar sake ke helmet pehna hua hai ya nahi.")
+
+# 1. Model Load karein
+# Apne trained model file ka naam yahan likhein (e.g., 'best.pt' ya 'helmet_model.pt')
+MODEL_PATH = "best.pt" 
 
 @st.cache_resource
-def load_model():
-    return YOLO("best.pt")
+def load_model(path):
+    try:
+        model = YOLO(path)
+        return model
+    except Exception as e:
+        st.error(format(f"Model load karne mein masala hua: {e}"))
+        return None
 
-try:
-    model = load_model()
-except Exception as e:
-    st.error(f"Model loading failed: {e}")
-    st.stop()
+model = load_model(MODEL_PATH)
 
-st.success("Helmet Detection Model Loaded Successfully!")
+# 2. File Uploader Component
+uploaded_file = st.file_uploader("Koi bhi tasveer (JPG, JPEG, PNG) select karein...", type=["jpg", "jpeg", "png"])
 
-option = st.selectbox(
-    "Choose Detection Type",
-    ["Image Detection", "Video Detection"]
-)
-
-if option == "Image Detection":
-
-    uploaded_file = st.file_uploader(
-        "Upload an image",
-        type=["jpg", "jpeg", "png"]
-    )
-
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("Original Image")
-            st.image(image, use_container_width=True)
-
-        if st.button("Detect Helmet", type="primary"):
-            with st.spinner("Analyzing image..."):
-                results = model.predict(
-                    image,
-                    conf=0.25,
-                    imgsz=640
-                )
-
-                result_image = results[0].plot()
-
-                with col2:
-                    st.subheader("Detection Result")
-                    st.image(
-                        result_image,
-                        channels="BGR",
-                        use_container_width=True
-                    )
-
-                if len(results[0].boxes) == 0:
-                    st.warning("No helmet-related objects detected.")
-                else:
-                    st.subheader("Detection Details")
-
-                    for box in results[0].boxes:
-                        class_id = int(box.cls[0])
-                        confidence = float(box.conf[0])
-                        label = model.names[class_id]
-
-                        st.write(
-                            f"**{label}** — "
-                            f"Confidence: {confidence:.1%}"
-                        )
-
-elif option == "Video Detection":
-
-    uploaded_video = st.file_uploader(
-        "Upload a video",
-        type=["mp4", "avi", "mov", "mkv"]
-    )
-
-    if uploaded_video:
-        st.video(uploaded_video)
-
-        if st.button("Start Video Detection", type="primary"):
-
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".mp4"
-            ) as temp_file:
-
-                temp_file.write(uploaded_video.getvalue())
-                input_path = temp_file.name
-
-            try:
-                with st.spinner("Processing video..."):
-
-                    results = model.predict(
-                        source=input_path,
-                        conf=0.25,
-                        imgsz=640,
-                        save=True,
-                        project="runs",
-                        name="helmet_detection",
-                        exist_ok=True,
-                        verbose=False
-                    )
-
-                    output_path = os.path.join(
-                        "runs",
-                        "helmet_detection"
-                    )
-
-                    video_files = [
-                        f for f in os.listdir(output_path)
-                        if f.lower().endswith(
-                            (".mp4", ".avi", ".mov", ".mkv")
-                        )
-                    ]
-
-                    if video_files:
-                        result_video = os.path.join(
-                            output_path,
-                            video_files[0]
-                        )
-
-                        st.success("Video detection completed!")
-                        st.subheader("Processed Video")
-
-                        st.video(result_video)
-
-                    else:
-                        st.error("Processed video was not found.")
-
-            except Exception as e:
-                st.error(f"Video processing failed: {e}")
-
-            finally:
-                if os.path.exists(input_path):
-                    os.remove(input_path)
-
-st.divider()
-
-st.caption(
-    "Educational AI project. Predictions may be incorrect "
-    "and should not be treated as definitive safety verification."
-)
+if uploaded_file is not None:
+    # Image ko open aur display karein
+    image = Image.open(uploaded_file)
+    
+    st.subheader("Original Image")
+    st.image(image, caption="Aap ki upload ki hui photo", use_container_width=True)
+    
+    if model is not None:
+        with st.spinner("Model tasveer ko scan kar raha hai... Please wait..."):
+            # Image ko OpenCV format (numpy array) mein convert karein
+            input_image = np.array(image)
+            
+            # YOLO model se predict karwayein
+            results = model(input_image)
+            
+            # Results ko draw karein (YOLO automatically bounding boxes draw kar deta hai)
+            res_plotted = results[0].plot()
+            
+            # BGR se RGB convert karein kyunki OpenCV BGR use karta hai aur Streamlit RGB
+            res_rgb = cv2.cvtColor(res_plotted, cv2.COLOR_BGR2RGB)
+            
+            st.success("Scanning mukammal!")
+            
+            # 3. Output Display karein
+            st.subheader("Detection Result")
+            st.image(res_rgb, caption="Helmet Detection Output", use_container_width=True)
+    else:
+        st.warning("Model file sahi se load nahi ho saki. Check karein ke 'best.pt' file mojood hai.")
