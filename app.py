@@ -1,4 +1,4 @@
-import streamlit as tf
+import streamlit as st  # Pehle yahan 'as tf' tha, usay 'as st' kar dein
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
